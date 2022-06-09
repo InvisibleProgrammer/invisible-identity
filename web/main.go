@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4/pgxpool"
 )
 
 func main() {
@@ -38,7 +40,7 @@ func main() {
 		log.Default().Printf("Sign up params: emailAddress: %s, passwordFirst: %s, passwordAgain: %s", email, passwordFirst, passwordAgain)
 
 		// Todo: change to https://github.com/jackc/pgx
-		// pgConnectUrl := "postgres://invisibleprogrammer:invisiblepassword@localhost:5432/invisible-identity-db"
+		pgConnectUrl := "postgres://invisibleprogrammer:invisiblepassword@localhost:5432/invisible-identity-db"
 
 		connConfig := pgx.ConnConfig{
 			Host:     "localhost",
@@ -62,6 +64,25 @@ func main() {
 		}
 
 		log.Default().Println(greeting)
+
+		dbPool, err := pgxpool.Connect(context.Background(), pgConnectUrl)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Connect to pool failed: %v\n", err)
+			os.Exit(1)
+		}
+
+		var userid int64
+		resultSet := dbPool.QueryRow(context.Background(), "select userid from users where emailaddress = $1", email)
+
+		err = resultSet.Scan(&userid)
+		if err != nil && err.Error() != pgx.ErrNoRows.Error() {
+			fmt.Fprintf(os.Stderr, "QueryRow from pool failed 1: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Todo: if there is no user found, register the user. If the user is already registered, give an error
+
+		log.Default().Println(userid)
 	})
 
 	router.Run()
