@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx"
@@ -76,13 +77,26 @@ func main() {
 
 		err = resultSet.Scan(&userid)
 		if err != nil && err.Error() != pgx.ErrNoRows.Error() {
-			fmt.Fprintf(os.Stderr, "QueryRow from pool failed 1: %v\n", err)
+			fmt.Fprintf(os.Stderr, "User %v is already registered.", email)
 			os.Exit(1)
 		}
 
-		// Todo: if there is no user found, register the user. If the user is already registered, give an error
+		if userid > 0 {
+			return
+		}
 
-		log.Default().Println(userid)
+		now := time.Now()
+		resultSet = dbPool.QueryRow(context.Background(), "insert into Users (EmailAddress, Activated, RecordedAt, UpdatedAt) values ($1, $2, $3, $3) returning UserId", email, false, now)
+
+		err = resultSet.Scan(&userid)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Connect to pool failed: %v\n", err)
+			os.Exit(1)
+		}
+
+		log.Default().Printf("%v is registered with id %v", email, userid)
+
+		// Todo: generate activation ticket
 	})
 
 	router.Run()

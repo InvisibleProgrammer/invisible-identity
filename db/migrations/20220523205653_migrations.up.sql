@@ -1,7 +1,7 @@
 create table Users (
     UserId bigint generated always as identity not null,
     EmailAddress varchar(255) not null,
-    Activated bit not null,
+    Activated boolean not null,
     RecordedAt timestamp not null, 
     UpdatedAt timestamp not null,
     primary key (UserId)
