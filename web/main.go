@@ -11,7 +11,13 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx"
 	"github.com/jackc/pgx/v4/pgxpool"
+	"golang.org/x/crypto/bcrypt"
 )
+
+func hashPassword(password string) (string, error) {
+	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 14)
+	return string(bytes), err
+}
 
 func main() {
 	router := gin.Default()
@@ -40,31 +46,16 @@ func main() {
 
 		log.Default().Printf("Sign up params: emailAddress: %s, passwordFirst: %s, passwordAgain: %s", email, passwordFirst, passwordAgain)
 
-		// Todo: change to https://github.com/jackc/pgx
+		if passwordFirst != passwordAgain {
+			c.HTML(http.StatusBadRequest, "sign-up.tmpl.html", gin.H{})
+		}
+
+		passwordHash, err := hashPassword(passwordFirst)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Unable to create password hash: %v\n", err)
+		}
+
 		pgConnectUrl := "postgres://invisibleprogrammer:invisiblepassword@localhost:5432/invisible-identity-db"
-
-		connConfig := pgx.ConnConfig{
-			Host:     "localhost",
-			Port:     5432,
-			User:     "invisibleprogrammer",
-			Password: "invisiblepassword",
-			Database: "invisible-identity-db",
-		}
-		conn, err := pgx.Connect(connConfig)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Unable to connect to database: %v\n", err)
-			os.Exit(1)
-		}
-		defer conn.Close()
-
-		var greeting string
-		err = conn.QueryRow("select 'Hello, world!'").Scan(&greeting)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "QueryRow failed: %v\n", err)
-			os.Exit(1)
-		}
-
-		log.Default().Println(greeting)
 
 		dbPool, err := pgxpool.Connect(context.Background(), pgConnectUrl)
 		if err != nil {
@@ -96,7 +87,15 @@ func main() {
 
 		log.Default().Printf("%v is registered with id %v", email, userid)
 
-		// Todo: generate activation ticket
+		commandTag, err := dbPool.Exec(context.Background(), "insert into PasswordHashes(UserId, PasswordHash, RecordedAt, UpdatedAt) values ($1, $2, $3, $3);", userid, passwordHash, now)
+		if err != nil || commandTag.RowsAffected() != 1 {
+			fmt.Fprintf(os.Stderr, "Cannot store password hash for user %v\n", userid)
+		}
+
+		// Todo: generate activation ticket: https://gist.github.com/dopey/c69559607800d2f2f90b1b1ed4e550fb
+
+		c.Redirect(http.StatusMovedPermanently, "/")
+
 	})
 
 	router.Run()
